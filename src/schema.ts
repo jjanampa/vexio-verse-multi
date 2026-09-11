@@ -9,11 +9,24 @@ export class Player extends Schema {
   @type("number") z: number = 0;
   @type("number") rotY: number = 0;
   @type("boolean") moving: boolean = false;
+  // Campos de ronda (solo sala lava)
+  @type("boolean") alive: boolean = true;
+  @type("boolean") spectator: boolean = false;
+  @type("number") score: number = 0;
+  @type("number") wins: number = 0;
+  @type("number") place: number = 0;
 }
 
 export class VerseState extends Schema {
   // Timestamp de creación de la sala. Los clientes lo usan para
-  // sincronizar eventos globales (ej. altura de la lava).
+  // sincronizar eventos globales (altura de la lava) en salas antiguas.
   @type("number") startedAt: number = 0;
+  // Ronda de lava: lobby -> countdown -> running -> result
+  @type("string") phase: string = "idle";
+  @type("number") phaseEndsAt: number = 0;
+  @type("number") roundStartedAt: number = 0;
+  @type("number") round: number = 0;
+  @type("number") aliveCount: number = 0;
+  @type("number") roundPlayers: number = 0;
   @type({ map: Player }) players = new MapSchema<Player>();
 }

@@ -2,6 +2,7 @@ import http from "node:http";
 import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { VerseRoom } from "./room";
+import { LavaRoom } from "./lava-room";
 
 const port = Number(process.env.PORT || 2567);
 
@@ -21,7 +22,7 @@ const gameServer = new Server({
 
 gameServer.define("hub", VerseRoom);
 gameServer.define("obby", VerseRoom);
-gameServer.define("lava", VerseRoom);
+gameServer.define("lava", LavaRoom);
 gameServer.define("tycoon", VerseRoom);
 gameServer.define("racing", VerseRoom);
 gameServer.define("survival", VerseRoom);
