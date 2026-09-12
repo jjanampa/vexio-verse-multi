@@ -28,5 +28,7 @@ export class VerseState extends Schema {
   @type("number") round: number = 0;
   @type("number") aliveCount: number = 0;
   @type("number") roundPlayers: number = 0;
+  // Desastres: catástrofe de la ronda en curso
+  @type("string") disaster: string = "";
   @type({ map: Player }) players = new MapSchema<Player>();
 }

@@ -106,6 +106,37 @@ async function main() {
 
   await r1.leave();
   await r2.leave();
+  log('lava ok');
+
+  // ---- Desastres Naturales ----
+  const c3 = new Client(URL);
+  const c4 = new Client(URL);
+  const d1 = await c3.joinOrCreate('disaster', opts('SmokeD1'));
+  const d2 = await c4.joinOrCreate('disaster', opts('SmokeD2'));
+  let disasterMsg = null;
+  d1.onMessage('disaster', (m) => (disasterMsg = m));
+  await waitFor(() => d1.state.players.size === 2, 2000, '2 jugadores en desastres');
+  await waitFor(() => d1.state.phase === 'countdown' || d1.state.phase === 'running', 14000, 'cuenta atrás desastres');
+  await waitFor(() => d1.state.phase === 'running', 6000, 'ronda de desastres');
+  await waitFor(() => disasterMsg !== null, 2000, 'mensaje disaster');
+  const KINDS = ['meteor', 'tornado', 'flood', 'earthquake', 'lightning'];
+  assert(KINDS.includes(disasterMsg.kind), `catástrofe válida (${disasterMsg.kind})`);
+  assert(d1.state.disaster === disasterMsg.kind, 'el estado refleja la catástrofe');
+  log(`ronda de desastres en marcha: ${disasterMsg.kind}`);
+
+  let overD = null;
+  d1.onMessage('roundOver', (m) => (overD = m));
+  d2.send('died', { secs: 30 });
+  await waitFor(() => overD !== null, 3000, 'roundOver desastres');
+  const deadD = overD.ranking.find((r) => r.id === d2.sessionId);
+  const aliveD = overD.ranking.find((r) => r.id === d1.sessionId);
+  assert(deadD && Math.abs(deadD.score - 30) < 0.01, `puntuación desastres (${deadD?.score})`);
+  assert(aliveD && aliveD.place === 1, 'superviviente 1º en desastres');
+  assert(overD.disaster === disasterMsg.kind, 'el ranking incluye la catástrofe');
+  log(`desastres ok (${overD.ranking.map((r) => `${r.place}. ${r.name} ${r.score}`).join(' | ')})`);
+
+  await d1.leave();
+  await d2.leave();
   log('todo correcto ✔');
 }
 
