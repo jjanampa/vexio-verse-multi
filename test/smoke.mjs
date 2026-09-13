@@ -169,6 +169,13 @@ async function main() {
   const targets = [...roles.keys()].filter((id) => id !== murdererId);
   byId.get(murdererId).send('hit', { target: targets[0] });
   await waitFor(() => killed.length === 1, 2500, 'primer asesinato');
+  // El cuchillo tiene cooldown en servidor: el segundo golpe inmediato se ignora
+  const knifeSpam = byId.get(murdererId).send !== undefined;
+  byId.get(murdererId).send('hit', { target: targets[1] });
+  await sleep(300);
+  assert(overMm === null || killed.length === 1, 'cooldown del cuchillo (no mata en cadena)');
+  void knifeSpam;
+  await sleep(1400);
   byId.get(murdererId).send('hit', { target: targets[1] });
   await waitFor(() => overMm !== null, 3000, 'roundOver asesino');
   assert(overMm.winner === 'murderer', `gana el asesino (${overMm.winner})`);

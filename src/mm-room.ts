@@ -23,12 +23,14 @@ export class MurderRoom extends VerseRoom {
   private solo = false;
   private over = false;
   private winner = "";
+  private lastKnifeAt = 0;
 
   onCreate() {
     super.onCreate();
     this.state.phase = "lobby";
     this.state.phaseEndsAt = Date.now() + LOBBY_MS;
     this.onMessage("hit", (client: Client, data: HitMsg) => this.onHit(client, data));
+    this.onMessage("died", (client: Client) => this.onDied(client));
     this.setSimulationInterval(() => this.tick(), 200);
   }
 
@@ -109,6 +111,7 @@ export class MurderRoom extends VerseRoom {
     this.roundIds = new Set(ids);
     this.over = false;
     this.winner = "";
+    this.lastKnifeAt = 0;
     st.players.forEach((p) => {
       p.alive = true;
       p.spectator = false;
@@ -138,6 +141,19 @@ export class MurderRoom extends VerseRoom {
     client?.send("role", payload);
   }
 
+  private onDied(client: Client) {
+    const st = this.state;
+    if (st.phase !== "running" || this.over || !this.solo) return;
+    const role = this.roles.get(client.sessionId);
+    if (role !== "sheriff") return;
+    const p = st.players.get(client.sessionId);
+    if (!p || !p.alive) return;
+    p.alive = false;
+    p.score = Math.max(0, Math.round((Date.now() - st.roundStartedAt) / 1000));
+    this.broadcast("killed", { id: client.sessionId, role: "sheriff", by: "knife" });
+    this.endRound("murderer", "solo-death");
+  }
+
   private onHit(client: Client, data: HitMsg) {
     const st = this.state;
     if (st.phase !== "running" || this.over) return;
@@ -157,18 +173,33 @@ export class MurderRoom extends VerseRoom {
     const tp = st.players.get(target);
     if (!tp || !tp.alive || target === attacker) return;
     if (role === "murderer") {
+      const now = Date.now();
+      if (now - this.lastKnifeAt < 1400) return;
+      const ap = st.players.get(attacker);
+      const dist = ap ? Math.hypot(ap.x - tp.x, ap.z - tp.z) : Infinity;
+      if (dist > 3.8 || Math.abs((ap?.y ?? 0) - tp.y) > 3) return;
+      this.lastKnifeAt = now;
       tp.alive = false;
       tp.spectator = false;
       this.broadcast("killed", { id: target, role: this.roles.get(target) ?? "innocent", by: "knife" });
       this.checkEnd();
     } else if (role === "sheriff" && this.gunOwner === attacker) {
+      const ap = st.players.get(attacker);
+      const dist = ap ? Math.hypot(ap.x - tp.x, ap.z - tp.z) : Infinity;
+      if (dist > 20) return;
       this.gunOwner = null;
       tp.alive = false;
       tp.spectator = false;
       const tRole = this.roles.get(target) ?? "innocent";
       this.broadcast("killed", { id: target, role: tRole, by: "gun" });
-      if (tRole === "murderer") this.endRound("innocents");
-      else this.checkEnd();
+      if (tRole === "murderer") {
+        this.endRound("innocents");
+      } else {
+        // El sheriff desperdició la bala: pierde el arma
+        const shooter = this.clients.find((c) => c.sessionId === attacker);
+        shooter?.send("gunLost", {});
+        this.checkEnd();
+      }
     }
   }
 

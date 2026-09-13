@@ -59,5 +59,5 @@ gameServer.define("mm", MurderRoom);
 gameServer.define("garden", VerseRoom);
 
 gameServer.listen(port).then(() => {
-  console.log(`vexio-verse-multi listo en :${port} (hub/obby/lava)`);
+  console.log(`vexio-verse-multi listo en :${port}`);
 });
