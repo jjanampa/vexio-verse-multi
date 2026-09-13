@@ -143,6 +143,46 @@ async function main() {
 
   await d1.leave();
   await d2.leave();
+  log('lava y desastres ok');
+
+  // ---- Asesino (Murder Mystery) ----
+  const c5 = new Client(URL);
+  const c6 = new Client(URL);
+  const c7 = new Client(URL);
+  const m1 = await c5.joinOrCreate('mm', opts('Mm1'));
+  const m2 = await c6.joinOrCreate('mm', opts('Mm2'));
+  const m3 = await c7.joinOrCreate('mm', opts('Mm3'));
+  const roles = new Map();
+  for (const r of [m1, m2, m3]) {
+    r.onMessage('role', (m) => roles.set(r.sessionId, m.role));
+  }
+  const killed = [];
+  m1.onMessage('killed', (k) => killed.push(k));
+  let overMm = null;
+  m1.onMessage('roundOver', (m) => (overMm = m));
+  await waitFor(() => roles.size === 3, 16000, 'roles repartidos');
+  const roleVals = [...roles.values()].sort().join(',');
+  assert(roleVals === 'innocent,murderer,sheriff', `roles correctos (${roleVals})`);
+  log(`roles ok: ${roleVals}`);
+  const murdererId = [...roles.entries()].find(([, r]) => r === 'murderer')[0];
+  const byId = new Map([[m1.sessionId, m1], [m2.sessionId, m2], [m3.sessionId, m3]]);
+  const targets = [...roles.keys()].filter((id) => id !== murdererId);
+  byId.get(murdererId).send('hit', { target: targets[0] });
+  await waitFor(() => killed.length === 1, 2500, 'primer asesinato');
+  byId.get(murdererId).send('hit', { target: targets[1] });
+  await waitFor(() => overMm !== null, 3000, 'roundOver asesino');
+  assert(overMm.winner === 'murderer', `gana el asesino (${overMm.winner})`);
+  log(`asesino ok (${overMm.winner}, ${overMm.roles.map((r) => r.role).join('/')})`);
+  await m1.leave();
+  await m2.leave();
+  await m3.leave();
+
+  // ---- Granja ----
+  const g1 = await new Client(URL).joinOrCreate('garden', opts('Garden'));
+  await waitFor(() => g1.state?.players?.size === 1, 3000, 'granja');
+  log('granja ok');
+  await g1.leave();
+
   log('todo correcto ✔');
 }
 

@@ -4,13 +4,14 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { VerseRoom, liveRooms } from "./room";
 import { LavaRoom } from "./lava-room";
 import { DisasterRoom } from "./disaster-room";
+import { MurderRoom } from "./mm-room";
 
 const port = Number(process.env.PORT || 2567);
 
 const httpServer = http.createServer((req, res) => {
   if (req.url === "/health" || req.url === "/") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, rooms: ["hub", "obby", "lava", "tycoon", "racing", "survival", "horror", "city", "disaster"] }));
+    res.end(JSON.stringify({ ok: true, rooms: ["hub", "obby", "lava", "tycoon", "racing", "survival", "horror", "city", "disaster", "mm", "garden"] }));
     return;
   }
   // Jugadores en línea por sala (lo usa la página de inicio)
@@ -54,6 +55,8 @@ gameServer.define("survival", VerseRoom);
 gameServer.define("horror", VerseRoom);
 gameServer.define("city", VerseRoom);
 gameServer.define("disaster", DisasterRoom);
+gameServer.define("mm", MurderRoom);
+gameServer.define("garden", VerseRoom);
 
 gameServer.listen(port).then(() => {
   console.log(`vexio-verse-multi listo en :${port} (hub/obby/lava)`);
