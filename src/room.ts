@@ -1,5 +1,6 @@
 import { Room, Client } from "@colyseus/core";
 import { Player, VerseState } from "./schema";
+import { unregisterRoom } from "./party";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const clampNum = (v: unknown, min: number, max: number, fb: number) =>
@@ -7,6 +8,48 @@ const clampNum = (v: unknown, min: number, max: number, fb: number) =>
 
 const MOVE_BUDGET = 40; // mensajes de movimiento por segundo
 const CHAT_COOLDOWN_MS = 1000;
+const CHAT_CHANNELS = new Set(["sala", "zona"]);
+const ITEM_RE = /^(auto|none|(?:hat|back)-[a-z0-9-]{1,18})$/;
+
+// Filtro básico de palabras (es/en). No pretende ser perfecto: el chat
+// muestra el texto moderado y los mensajes ofensivos se enmascaran.
+const BAD_WORDS = [
+  "puta", "puto", "mierda", "pendejo", "pendeja", "idiota", "imbecil", "estupido", "estupida",
+  "cabron", "cabrona", "joder", "cono", "coño", "verga", "chinga", "chingar", "culero",
+  "fuck", "fucking", "shit", "bitch", "asshole", "bastard", "nigger", "nigga", "retard",
+  "porno", "porn", "sexo", "nazi",
+];
+
+function normalizeText(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/4/g, "a")
+    .replace(/0/g, "o")
+    .replace(/3/g, "e")
+    .replace(/1/g, "i")
+    .replace(/5/g, "s")
+    .replace(/7/g, "t")
+    .replace(/@/g, "a")
+    .replace(/\$/g, "s");
+}
+
+function moderate(raw: string): string {
+  let out = raw;
+  for (const w of BAD_WORDS) {
+    const re = new RegExp(`\\b${w}\\b`, "gi");
+    out = out.replace(re, (m) => "*".repeat(m.length));
+  }
+  const norm = normalizeText(out);
+  for (const w of BAD_WORDS) {
+    const spaced = w.split("").join("[\\s._-]*");
+    if (new RegExp(`(^|[^a-z])${spaced}([^a-z]|$)`).test(norm)) {
+      return "▓▓▓ (mensaje moderado)";
+    }
+  }
+  return out;
+}
 
 // Registro de salas vivas para el endpoint /players de la página de inicio
 export const liveRooms = new Set<VerseRoom>();
@@ -46,7 +89,7 @@ export class VerseRoom extends Room<VerseState> {
       p.moving = data.moving === true;
     });
 
-    this.onMessage("chat", (client: Client, data: { text?: unknown }) => {
+    this.onMessage("chat", (client: Client, data: { text?: unknown; channel?: unknown }) => {
       const p = this.state.players.get(client.sessionId);
       if (!p) return;
       const now = Date.now();
@@ -54,8 +97,21 @@ export class VerseRoom extends Room<VerseState> {
       if (now - last < CHAT_COOLDOWN_MS) return;
       const text = String((data as { text?: unknown })?.text ?? "").trim().slice(0, 60);
       if (!text) return;
+      const rawChannel = String((data as { channel?: unknown })?.channel ?? "sala");
+      const channel = CHAT_CHANNELS.has(rawChannel) ? rawChannel : "sala";
       this.chatAt.set(client.sessionId, now);
-      this.broadcast("chat", { id: client.sessionId, name: p.name, text });
+      // x/z van en el mensaje para que el cliente filtre el canal de zona
+      this.broadcast("chat", { id: client.sessionId, name: p.name, text: moderate(text), channel, x: p.x, z: p.z });
+    });
+
+    // Emotes: el servidor solo retransmite (la pose es del cliente)
+    this.onMessage("emote", (client: Client, data: { emote?: unknown; ms?: unknown }) => {
+      const p = this.state.players.get(client.sessionId);
+      if (!p) return;
+      const emote = String(data?.emote ?? "").slice(0, 20);
+      if (!/^[a-z-]{1,20}$/.test(emote) || emote === "none") return;
+      const ms = clampNum(data?.ms, 500, 6000, 4000);
+      this.broadcast("emote", { id: client.sessionId, emote, ms }, { except: client });
     });
   }
 
@@ -79,6 +135,14 @@ export class VerseRoom extends Room<VerseState> {
     p.head = HEX.test(head) ? head : "#fbbf24";
     const pants = String(options.pants ?? "");
     p.pants = HEX.test(pants) ? pants : "#a4bd47";
+    if (options.hat !== undefined) {
+      const hat = String(options.hat);
+      p.hat = ITEM_RE.test(hat) && hat.startsWith("hat-") ? hat : hat === "none" || hat === "auto" ? hat : "";
+    }
+    if (options.back !== undefined) {
+      const back = String(options.back);
+      p.back = ITEM_RE.test(back) && back.startsWith("back-") ? back : back === "none" ? "none" : "";
+    }
     p.x = clampNum(options.x, -300, 300, 0);
     p.y = clampNum(options.y, -50, 200, 0);
     p.z = clampNum(options.z, -300, 300, 0);
@@ -97,5 +161,10 @@ export class VerseRoom extends Room<VerseState> {
 
   onDispose() {
     liveRooms.delete(this);
+    try {
+      unregisterRoom(this.roomId);
+    } catch {
+      /* noop */
+    }
   }
 }

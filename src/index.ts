@@ -5,23 +5,45 @@ import { VerseRoom, liveRooms } from "./room";
 import { LavaRoom } from "./lava-room";
 import { DisasterRoom } from "./disaster-room";
 import { MurderRoom } from "./mm-room";
+import { handleParty, setRoomExists, partyCount } from "./party";
+import { handleUgc, ugcCount } from "./ugc";
 
 const port = Number(process.env.PORT || 2567);
 
-const httpServer = http.createServer((req, res) => {
+const httpServer = http.createServer(async (req, res) => {
+  const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+  try {
+    if (await handleParty(req, res, url)) return;
+    if (await handleUgc(req, res, url)) return;
+  } catch (err) {
+    console.error("http error", err);
+    if (!res.headersSent) {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "error interno" }));
+    }
+    return;
+  }
+
   if (req.url === "/health" || req.url === "/") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, rooms: ["hub", "obby", "lava", "tycoon", "racing", "survival", "horror", "city", "disaster", "mm", "garden"] }));
+    res.end(
+      JSON.stringify({
+        ok: true,
+        rooms: ["hub", "obby", "lava", "tycoon", "racing", "survival", "horror", "city", "disaster", "mm", "garden"],
+        parties: partyCount(),
+        ugcMaps: ugcCount(),
+      }),
+    );
     return;
   }
   // Jugadores en línea por sala (lo usa la página de inicio)
   if (req.url === "/players" || req.url?.startsWith("/players?")) {
-    const rooms: Record<string, { name: string; body: string; head: string; pants: string }[]> = {};
+    const rooms: Record<string, { name: string; body: string; head: string; pants: string; hat: string; back: string }[]> = {};
     let total = 0;
     for (const room of liveRooms) {
-      const list: { name: string; body: string; head: string; pants: string }[] = [];
+      const list: { name: string; body: string; head: string; pants: string; hat: string; back: string }[] = [];
       try {
-        room.state.players.forEach((p) => list.push({ name: p.name, body: p.body, head: p.head, pants: p.pants }));
+        room.state.players.forEach((p) => list.push({ name: p.name, body: p.body, head: p.head, pants: p.pants, hat: p.hat, back: p.back }));
       } catch {
         /* sala cerrándose */
       }
@@ -44,6 +66,13 @@ const httpServer = http.createServer((req, res) => {
 
 const gameServer = new Server({
   transport: new WebSocketTransport({ server: httpServer }),
+});
+
+setRoomExists((roomId, mode) => {
+  for (const room of liveRooms) {
+    if (room.roomId === roomId && room.roomName === mode) return true;
+  }
+  return false;
 });
 
 gameServer.define("hub", VerseRoom);

@@ -50,7 +50,10 @@ async function main() {
 
   const c1 = new Client(URL);
   const c2 = new Client(URL);
-  const opts = (name) => ({ name, body: '#3b82f6', head: '#fbbf24', x: 0, y: 2, z: 0 });
+  const opts = (name) => ({
+    name, body: '#3b82f6', head: '#fbbf24', x: 0, y: 2, z: 0,
+    hat: 'hat-crown', back: 'back-rocket',
+  });
   const r1 = await c1.joinOrCreate('lava', opts('SmokeA'));
   const r2 = await c2.joinOrCreate('lava', opts('SmokeB'));
   log('dos clientes en la sala lava');
@@ -88,7 +91,30 @@ async function main() {
   await sleep(400);
   assert(chats.length === 1, `cooldown de chat (recibidos ${chats.length})`);
   assert(chats[0].text === 'hola mundo', 'texto de chat correcto');
+  assert(chats[0].channel === 'sala', 'canal por defecto = sala');
+  assert(typeof chats[0].x === 'number' && typeof chats[0].z === 'number', 'el chat incluye posición para zona');
   log('chat + cooldown ok');
+
+  // Moderación + canal de zona (tras el cooldown de 1s)
+  await sleep(1100);
+  r1.send('chat', { text: 'hola mierda', channel: 'zona' });
+  await waitFor(() => chats.length >= 2, 2000, 'chat moderado');
+  const moderado = chats[1];
+  assert(!/mierda/i.test(moderado.text) && moderado.text.includes('*'), `texto moderado (${moderado.text})`);
+  assert(moderado.channel === 'zona', 'canal de zona etiquetado');
+  log(`moderación ok (${moderado.text})`);
+
+  // Cosméticos sincronizados por el estado
+  const meLava = r1.state.players.get(r1.sessionId);
+  assert(meLava.hat === 'hat-crown' && meLava.back === 'back-rocket', 'hat/back sincronizados');
+
+  // Emote retransmitido a los demás
+  let emoteMsg = null;
+  r2.onMessage('emote', (m) => (emoteMsg = m));
+  r1.send('emote', { emote: 'dance', ms: 2000 });
+  await waitFor(() => emoteMsg !== null, 2000, 'emote relay');
+  assert(emoteMsg.id === r1.sessionId && emoteMsg.emote === 'dance', 'emote retransmitido');
+  log('cosméticos + emote ok');
 
   // Rondas: lobby -> countdown -> running
   await waitFor(() => r1.state.phase === 'countdown' || r1.state.phase === 'running', 9000, 'cuenta atrás');
@@ -189,6 +215,78 @@ async function main() {
   await waitFor(() => g1.state?.players?.size === 1, 3000, 'granja');
   log('granja ok');
   await g1.leave();
+
+  // ---- Party por código ----
+  const pc = new Client(URL);
+  const host = await pc.create('obby', opts('PartyHost'));
+  const CODE = 'SMK1';
+  let pres = await fetch(`${URL}/party`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ code: CODE, mode: 'obby' }),
+  });
+  assert(pres.ok, 'party reservada por código');
+  pres = await fetch(`${URL}/party`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ code: CODE, mode: 'obby', roomId: host.roomId }),
+  });
+  assert(pres.ok, 'party registra el roomId del anfitrión');
+  const pinfo = await (await fetch(`${URL}/party?code=${CODE}`)).json();
+  assert(pinfo.ok && pinfo.roomId === host.roomId && pinfo.ready, 'party lista para invitar');
+  const pg = new Client(URL);
+  const guest = await pg.joinById(host.roomId, opts('PartyGuest'));
+  await waitFor(() => host.state.players.size === 2, 2500, 'invitado en la party');
+  assert(guest.sessionId !== host.sessionId, 'el invitado entró a la misma sala');
+  const pbad = await fetch(`${URL}/party`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ code: '!!', mode: 'obby' }),
+  });
+  assert(!pbad.ok, 'rechaza códigos inválidos');
+  log(`party ok (${CODE} -> ${host.roomId.slice(0, 8)}…)`);
+  await host.leave();
+  await guest.leave();
+
+  // ---- UGC en servidor ----
+  const boxes = [
+    { x: 0, y: 0.5, z: 0, w: 2.5, h: 0.6, d: 2.5, color: '#22c55e', checkpoint: false },
+    { x: 0, y: 1, z: 3, w: 2.5, h: 0.6, d: 2.5, color: '#ef4444', checkpoint: true },
+  ];
+  const badUp = await fetch(`${URL}/ugc`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'Malo', author: 'Smoke', boxes: [boxes[0]] }),
+  });
+  assert(badUp.status === 400, 'rechaza mapas con <2 bloques');
+  const up = await (
+    await fetch(`${URL}/ugc`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Mapa Smoke', author: 'Smoke', boxes }),
+    })
+  ).json();
+  assert(up.ok && up.map?.id, 'subida UGC correcta');
+  const ulist = await (await fetch(`${URL}/ugc?sort=new&limit=5`)).json();
+  assert(ulist.ok && ulist.maps.some((m) => m.id === up.map.id), 'listado UGC incluye el mapa');
+  const uone = await (await fetch(`${URL}/ugc/one?id=${up.map.id}`)).json();
+  assert(uone.ok && uone.map.boxes.length === 2, 'detalle UGC con bloques');
+  const voter = 'vsmoke-123456';
+  const like1 = await (
+    await fetch(`${URL}/ugc/like`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: up.map.id, voter }),
+    })
+  ).json();
+  const like2 = await (
+    await fetch(`${URL}/ugc/like`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: up.map.id, voter }),
+    })
+  ).json();
+  assert(like1.likes === 1 && like2.likes === 1, 'like único por votante');
+  log(`ugc ok (${up.map.id}, ${like1.likes} like)`);
+
+  // /health expone los contadores nuevos
+  const health = await (await fetch(`${URL}/health`)).json();
+  assert(health.ok && health.ugcMaps >= 1, 'health reporta mapas UGC');
+  assert(health.parties >= 1, 'health reporta parties');
+  log(`health ok (${health.ugcMaps} mapas, ${health.parties} parties)`);
 
   log('todo correcto ✔');
 }
