@@ -73,6 +73,12 @@ async function main() {
   }, 2000, 'movimiento sincronizado');
   log('move ok');
 
+  // Endpoint /players (página de inicio)
+  const playersRes = await (await fetch(`${URL}/players`)).json();
+  assert(playersRes.total >= 2, `endpoint /players cuenta jugadores (${playersRes.total})`);
+  assert(Array.isArray(playersRes.rooms?.lava) && playersRes.rooms.lava.length >= 2, '/players lista la sala lava');
+  log(`players ok (${playersRes.total} en línea)`);
+
   // Chat + cooldown (el segundo mensaje inmediato se descarta)
   const chats = [];
   r2.onMessage('chat', (m) => chats.push(m));

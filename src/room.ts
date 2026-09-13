@@ -8,6 +8,9 @@ const clampNum = (v: unknown, min: number, max: number, fb: number) =>
 const MOVE_BUDGET = 40; // mensajes de movimiento por segundo
 const CHAT_COOLDOWN_MS = 1000;
 
+// Registro de salas vivas para el endpoint /players de la página de inicio
+export const liveRooms = new Set<VerseRoom>();
+
 interface MoveMsg {
   x?: unknown;
   y?: unknown;
@@ -26,6 +29,7 @@ export class VerseRoom extends Room<VerseState> {
   onCreate() {
     this.setState(new VerseState());
     this.state.startedAt = Date.now();
+    liveRooms.add(this);
 
     this.onMessage("sync-request", (client: Client) => {
       client.send("sync", { now: Date.now() });
@@ -87,5 +91,9 @@ export class VerseRoom extends Room<VerseState> {
     this.chatAt.delete(client.sessionId);
     this.moveWindow.delete(client.sessionId);
     console.log(`leave ${this.roomName} ${client.sessionId} -> ${this.state.players.size}`);
+  }
+
+  onDispose() {
+    liveRooms.delete(this);
   }
 }
