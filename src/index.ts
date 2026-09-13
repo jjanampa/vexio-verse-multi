@@ -16,12 +16,12 @@ const httpServer = http.createServer((req, res) => {
   }
   // Jugadores en línea por sala (lo usa la página de inicio)
   if (req.url === "/players" || req.url?.startsWith("/players?")) {
-    const rooms: Record<string, { name: string; body: string; head: string }[]> = {};
+    const rooms: Record<string, { name: string; body: string; head: string; pants: string }[]> = {};
     let total = 0;
     for (const room of liveRooms) {
-      const list: { name: string; body: string; head: string }[] = [];
+      const list: { name: string; body: string; head: string; pants: string }[] = [];
       try {
-        room.state.players.forEach((p) => list.push({ name: p.name, body: p.body, head: p.head }));
+        room.state.players.forEach((p) => list.push({ name: p.name, body: p.body, head: p.head, pants: p.pants }));
       } catch {
         /* sala cerrándose */
       }

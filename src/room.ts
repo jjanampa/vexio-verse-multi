@@ -77,6 +77,8 @@ export class VerseRoom extends Room<VerseState> {
     const head = String(options.head ?? "");
     p.body = HEX.test(body) ? body : "#3b82f6";
     p.head = HEX.test(head) ? head : "#fbbf24";
+    const pants = String(options.pants ?? "");
+    p.pants = HEX.test(pants) ? pants : "#a4bd47";
     p.x = clampNum(options.x, -300, 300, 0);
     p.y = clampNum(options.y, -50, 200, 0);
     p.z = clampNum(options.z, -300, 300, 0);

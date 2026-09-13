@@ -4,6 +4,7 @@ export class Player extends Schema {
   @type("string") name: string = "Invitado";
   @type("string") body: string = "#3b82f6";
   @type("string") head: string = "#fbbf24";
+  @type("string") pants: string = "#a4bd47";
   @type("number") x: number = 0;
   @type("number") y: number = 0;
   @type("number") z: number = 0;
